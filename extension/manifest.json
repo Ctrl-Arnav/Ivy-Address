@@ -1,0 +1,25 @@
+{
+  "manifest_version": 3,
+  "name": "Adaptive Privacy Observatory",
+  "version": "0.1.0",
+  "description": "Intercepts and deterministically perturbs high-entropy browser APIs to prevent cross-site fingerprint correlation.",
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
+    {
+      "matches": ["<all_urls>"],
+      "js": ["injector.js"],
+      "run_at": "document_start",
+      "world": "ISOLATED"
+    }
+  ],
+  "permissions": ["storage"],
+  "icons": {
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}
