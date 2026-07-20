@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Adaptive Privacy Observatory</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="popup-container">
+    <!-- Header -->
+    <header class="popup-header">
+      <div class="logo-row">
+        <img src="icons/icon48.svg" alt="APO" class="logo-icon">
+        <div class="logo-text">
+          <h1>Privacy Observatory</h1>
+          <span class="version">v1.0.0</span>
+        </div>
+      </div>
+      <button id="toggle-btn" class="toggle-btn active" title="Toggle Protection">
+        <span class="toggle-icon"></span>
+      </button>
+    </header>
+
+    <!-- Status Banner -->
+    <div id="status-banner" class="status-banner active">
+      <span class="status-dot"></span>
+      <span id="status-text">Protection Active</span>
+    </div>
+
+    <!-- Domain Info -->
+    <div class="domain-card">
+      <div class="domain-label">Current Domain</div>
+      <div id="domain-name" class="domain-name">—</div>
+      <div class="domain-meta">
+        <span id="domain-classification" class="classification-badge unknown">scanning</span>
+        <span id="domain-confidence" class="confidence-val">—</span>
+      </div>
+    </div>
+
+    <!-- Stats Grid -->
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-value" id="stat-intercepts">0</div>
+        <div class="stat-label">Intercepts</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" id="stat-domains">0</div>
+        <div class="stat-label">Domains</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" id="stat-blocked">0</div>
+        <div class="stat-label">Blocked</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" id="stat-entropy">—</div>
+        <div class="stat-label">Entropy ↓</div>
+      </div>
+    </div>
+
+    <!-- Quick Actions -->
+    <div class="actions">
+      <a id="dashboard-link" href="http://127.0.0.1:8000/dashboard" target="_blank" class="action-btn">
+        <span class="action-icon">📊</span> Dashboard
+      </a>
+      <a id="options-link" class="action-btn" title="Settings">
+        <span class="action-icon">⚙️</span> Settings
+      </a>
+    </div>
+
+    <!-- Footer -->
+    <footer class="popup-footer">
+      <span id="backend-status" class="backend-indicator disconnected">
+        <span class="backend-dot"></span>
+        Backend: Offline
+      </span>
+    </footer>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

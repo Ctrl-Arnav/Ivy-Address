@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>APO Dashboard — Adaptive Privacy Observatory</title>
+  <meta name="description" content="Real-time telemetry dashboard for the Adaptive Privacy Observatory anti-fingerprinting system.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="sidebar-brand">
+        <div class="brand-icon">
+          <svg viewBox="0 0 32 32" width="28" height="28">
+            <defs><linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#00E5FF"/><stop offset="100%" stop-color="#00BFA5"/></linearGradient></defs>
+            <path d="M16 3 L28 9 L28 19 C28 25 22 30 16 31 C10 30 4 25 4 19 L4 9Z" fill="none" stroke="url(#g)" stroke-width="2"/>
+            <ellipse cx="16" cy="16" rx="6" ry="4" fill="none" stroke="url(#g)" stroke-width="1.5"/>
+            <circle cx="16" cy="16" r="2" fill="url(#g)" opacity="0.8"/>
+            <line x1="11" y1="20" x2="21" y2="12" stroke="#FF1744" stroke-width="1.5" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <div class="brand-text">
+          <span class="brand-name">Privacy Observatory</span>
+          <span class="brand-version">Dashboard v1.0.0</span>
+        </div>
+      </div>
+
+      <nav class="sidebar-nav">
+        <a class="nav-item active" data-view="overview">
+          <span class="nav-icon">📊</span> Overview
+        </a>
+        <a class="nav-item" data-view="telemetry">
+          <span class="nav-icon">📡</span> Live Telemetry
+        </a>
+        <a class="nav-item" data-view="policies">
+          <span class="nav-icon">🛡️</span> Domain Policies
+        </a>
+        <a class="nav-item" data-view="entropy">
+          <span class="nav-icon">🔐</span> Entropy Analysis
+        </a>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="connection-status" id="ws-status">
+          <span class="status-dot disconnected"></span>
+          <span id="ws-status-text">Connecting...</span>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-content">
+      <!-- Overview View -->
+      <section class="view active" id="view-overview">
+        <div class="view-header">
+          <h1>System Overview</h1>
+          <div class="header-meta">
+            <span id="uptime-display" class="meta-chip">Uptime: —</span>
+            <span id="version-display" class="meta-chip">v—</span>
+          </div>
+        </div>
+
+        <!-- Stats Row -->
+        <div class="stats-row">
+          <div class="stat-card glow-cyan">
+            <div class="stat-icon">🔍</div>
+            <div class="stat-body">
+              <div class="stat-value" id="total-intercepts">0</div>
+              <div class="stat-label">Total Intercepts</div>
+            </div>
+          </div>
+          <div class="stat-card glow-teal">
+            <div class="stat-icon">🌐</div>
+            <div class="stat-body">
+              <div class="stat-value" id="cache-size">0</div>
+              <div class="stat-label">Domains Cached</div>
+            </div>
+          </div>
+          <div class="stat-card glow-green">
+            <div class="stat-icon">📉</div>
+            <div class="stat-body">
+              <div class="stat-value" id="entropy-reduction">—</div>
+              <div class="stat-label">Entropy Reduction</div>
+            </div>
+          </div>
+          <div class="stat-card glow-purple">
+            <div class="stat-icon">👥</div>
+            <div class="stat-body">
+              <div class="stat-value" id="dashboard-clients">0</div>
+              <div class="stat-label">Dashboard Clients</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Charts Row -->
+        <div class="charts-row">
+          <div class="chart-card">
+            <h3>Recent Activity</h3>
+            <div class="chart-container" id="activity-chart"></div>
+          </div>
+          <div class="chart-card">
+            <h3>Classification Breakdown</h3>
+            <div class="chart-container" id="classification-chart">
+              <div class="donut-chart" id="donut">
+                <div class="donut-center">
+                  <span id="donut-total">0</span>
+                  <span class="donut-label">events</span>
+                </div>
+              </div>
+              <div class="donut-legend" id="donut-legend"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Recent Events -->
+        <div class="card">
+          <h3>Recent Events</h3>
+          <div class="table-wrapper">
+            <table class="data-table" id="recent-events-table">
+              <thead>
+                <tr>
+                  <th>Time</th>
+                  <th>API</th>
+                  <th>Origin</th>
+                  <th>Intent</th>
+                  <th>Confidence</th>
+                  <th>Entropy</th>
+                </tr>
+              </thead>
+              <tbody id="recent-events-body"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- Live Telemetry View -->
+      <section class="view" id="view-telemetry">
+        <div class="view-header">
+          <h1>Live Telemetry Feed</h1>
+          <div class="header-actions">
+            <button class="btn btn-outline" id="clear-telemetry">Clear</button>
+            <label class="toggle-label">
+              <input type="checkbox" id="auto-scroll" checked> Auto-scroll
+            </label>
+          </div>
+        </div>
+        <div class="telemetry-feed" id="telemetry-feed"></div>
+      </section>
+
+      <!-- Domain Policies View -->
+      <section class="view" id="view-policies">
+        <div class="view-header">
+          <h1>Domain Policies</h1>
+          <div class="header-actions">
+            <input type="text" class="search-input" id="policy-search" placeholder="Search domains...">
+          </div>
+        </div>
+        <div class="table-wrapper">
+          <table class="data-table" id="policies-table">
+            <thead>
+              <tr>
+                <th>Origin</th>
+                <th>Intent</th>
+                <th>Confidence</th>
+                <th>Noise</th>
+                <th>Source</th>
+                <th>Signals</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="policies-body"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- Entropy Analysis View -->
+      <section class="view" id="view-entropy">
+        <div class="view-header">
+          <h1>Entropy Analysis</h1>
+          <p class="view-subtitle">Information leakage per API before and after PRNG perturbation</p>
+        </div>
+        <div class="entropy-summary" id="entropy-summary"></div>
+        <div class="entropy-bars" id="entropy-bars"></div>
+      </section>
+    </main>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

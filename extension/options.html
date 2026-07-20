@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>APO Settings</title>
+  <link rel="stylesheet" href="options.css">
+</head>
+<body>
+  <div class="options-container">
+    <header class="options-header">
+      <img src="icons/icon48.svg" alt="APO" class="logo">
+      <div>
+        <h1>Adaptive Privacy Observatory</h1>
+        <p class="subtitle">Configuration & Preferences</p>
+      </div>
+    </header>
+
+    <!-- Backend Connection -->
+    <section class="option-section">
+      <h2>Backend Connection</h2>
+      <div class="option-row">
+        <label for="backend-url">WebSocket URL</label>
+        <input type="text" id="backend-url" value="ws://127.0.0.1:8000/ws/telemetry" placeholder="ws://host:port/ws/telemetry">
+      </div>
+    </section>
+
+    <!-- Protection Level -->
+    <section class="option-section">
+      <h2>Protection Level</h2>
+      <div class="option-row">
+        <label for="noise-level">Noise Level</label>
+        <select id="noise-level">
+          <option value="off">Off — No perturbation</option>
+          <option value="low">Low — Minimal noise, fewer false positives</option>
+          <option value="adaptive" selected>Adaptive — Heuristic-driven (recommended)</option>
+          <option value="max">Maximum — Full noise on all APIs</option>
+        </select>
+      </div>
+      <div class="option-row">
+        <label for="salt-rotation">Salt Rotation (hours)</label>
+        <input type="number" id="salt-rotation" value="24" min="1" max="168">
+        <span class="option-hint">How often fingerprint identities rotate. Default: 24h.</span>
+      </div>
+    </section>
+
+    <!-- Domain Lists -->
+    <section class="option-section">
+      <h2>Domain Allowlist</h2>
+      <p class="section-desc">Domains that will never be perturbed (e.g., banking sites).</p>
+      <textarea id="whitelist" rows="4" placeholder="One domain per line&#10;example.com&#10;mybank.com"></textarea>
+    </section>
+
+    <section class="option-section">
+      <h2>Domain Blocklist</h2>
+      <p class="section-desc">Domains that always receive maximum noise.</p>
+      <textarea id="blacklist" rows="4" placeholder="One domain per line&#10;tracker.com&#10;fingerprint.io"></textarea>
+    </section>
+
+    <!-- Display -->
+    <section class="option-section">
+      <h2>Display</h2>
+      <div class="option-row checkbox-row">
+        <input type="checkbox" id="show-badge" checked>
+        <label for="show-badge">Show intercept count on toolbar badge</label>
+      </div>
+    </section>
+
+    <!-- Actions -->
+    <div class="actions">
+      <button id="save-btn" class="btn btn-primary">Save Settings</button>
+      <button id="reset-btn" class="btn btn-secondary">Reset to Defaults</button>
+    </div>
+
+    <div id="save-status" class="save-status"></div>
+  </div>
+
+  <script src="options.js"></script>
+</body>
+</html>

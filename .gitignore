@@ -9,6 +9,10 @@ build/
 .env
 venv/
 .venv/
+.pytest_cache/
+.ruff_cache/
+htmlcov/
+.coverage
 
 # Node
 node_modules/
@@ -19,11 +23,15 @@ npm-debug.log*
 .idea/
 *.swp
 *.swo
+.agents/
 
 # OS
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# Docker
+docker-compose.override.yml
 
 # Project-specific
 *.log

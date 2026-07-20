@@ -1,6 +1,6 @@
 // ============================================================================
 // Adaptive Privacy Observatory — Content Script (MAIN World)
-// Runtime API Interceptor & Deterministic Perturbation Engine
+// Runtime API Interceptor & Deterministic Perturbation Engine  v1.0.0
 //
 // This script runs in the page's JS context (world: "MAIN") at document_start,
 // before any page scripts execute. It overrides high-entropy browser API
@@ -13,7 +13,10 @@
   "use strict";
 
   const LOG_PREFIX = "[Observatory]";
-  const ENABLED = true; // Global kill switch — Phase 2 will make this dynamic
+  let ENABLED = true; // Dynamic — updated via settings from background worker
+
+  // Per-origin noise multiplier (0.0–1.0). Updated by backend classifications.
+  let noiseMultiplier = 1.0;
 
   // ========================================================================
   // 1. ORIGINAL API REFERENCES
@@ -36,6 +39,13 @@
     getParameter2: typeof WebGL2RenderingContext !== "undefined"
       ? WebGL2RenderingContext.prototype.getParameter
       : null,
+
+    // Navigator — capture original descriptors for spoofing
+    navigatorProto: Object.getOwnPropertyDescriptors(Navigator.prototype),
+
+    // ClientRects
+    getBoundingClientRect: Element.prototype.getBoundingClientRect,
+    getClientRects: Element.prototype.getClientRects,
 
     // Utilities
     createElement: document.createElement.bind(document),
@@ -174,6 +184,14 @@
   // ========================================================================
 
   /**
+   * Check if perturbation should be applied based on ENABLED state
+   * and noise multiplier.
+   */
+  function shouldPerturb() {
+    return ENABLED && noiseMultiplier > 0;
+  }
+
+  /**
    * Apply deterministic LSB perturbation to pixel data (Uint8ClampedArray).
    * Flips the least significant bit of each RGB channel based on the PRNG stream.
    * Alpha channel is left untouched to avoid transparency artifacts.
@@ -198,8 +216,11 @@
         bitPos = 0;
       }
 
-      // XOR the LSB with a PRNG bit — imperceptible visually, changes every hash
-      data[i] = data[i] ^ ((bits >>> bitPos) & 1);
+      // Apply noise based on multiplier — at full noise, always flip LSB.
+      // At reduced noise, probabilistically skip some perturbations.
+      if (noiseMultiplier >= 1.0 || prng.nextFloat() < noiseMultiplier) {
+        data[i] = data[i] ^ ((bits >>> bitPos) & 1);
+      }
       bitPos++;
     }
   }
@@ -217,7 +238,7 @@
     for (let i = 0; i < len; i++) {
       // Generate a tiny perturbation: [-5e-8, +5e-8]
       // This is well below audible threshold but breaks fingerprint hashes
-      const noise = (prng.nextFloat() - 0.5) * 1e-7;
+      const noise = (prng.nextFloat() - 0.5) * 1e-7 * noiseMultiplier;
       data[i] += noise;
     }
   }
@@ -239,9 +260,26 @@
         bits = prng.next();
         bitPos = 0;
       }
-      data[i] = data[i] ^ ((bits >>> bitPos) & 1);
+      if (noiseMultiplier >= 1.0 || prng.nextFloat() < noiseMultiplier) {
+        data[i] = data[i] ^ ((bits >>> bitPos) & 1);
+      }
       bitPos++;
     }
+  }
+
+  /**
+   * Perturb a DOMRect by adding tiny deterministic offsets.
+   * This defeats ClientRects-based fingerprinting while keeping
+   * the values visually identical.
+   */
+  function perturbDOMRect(rect, prng) {
+    const noise = () => (prng.nextFloat() - 0.5) * 0.001 * noiseMultiplier;
+    return new DOMRect(
+      rect.x + noise(),
+      rect.y + noise(),
+      rect.width + noise(),
+      rect.height + noise()
+    );
   }
 
   // ========================================================================
@@ -296,20 +334,29 @@
   /**
    * Listen for classification responses from the backend (relayed via injector).
    * These update the local policy for whether to apply noise or not.
-   * Phase 2+: this will gate the noise_multiplier per-origin.
    */
   window.addEventListener("message", (event) => {
     if (event.source !== window) return;
     const msg = event.data;
-    if (!msg || msg.channel !== MESSAGE_CHANNEL || msg.type !== "classification") return;
+    if (!msg || msg.channel !== MESSAGE_CHANNEL) return;
 
-    const response = msg.payload;
-    if (response && typeof response.noise_multiplier === "number") {
-      console.debug(
-        `${LOG_PREFIX} Classification received: ${response.classification?.intent || "unknown"} ` +
-        `(noise: ${response.noise_multiplier}, entropy: ${response.entropy_before?.toFixed(1)}→${response.entropy_after?.toFixed(1)} bits)`
-      );
-      // Phase 2+: update per-origin noise multiplier based on this response
+    if (msg.type === "classification") {
+      const response = msg.payload;
+      if (response && typeof response.noise_multiplier === "number") {
+        noiseMultiplier = response.noise_multiplier;
+        console.debug(
+          `${LOG_PREFIX} Classification received: ${response.classification?.intent || "unknown"} ` +
+          `(noise: ${noiseMultiplier.toFixed(2)}, entropy: ${response.entropy_before?.toFixed(1)}→${response.entropy_after?.toFixed(1)} bits)`
+        );
+      }
+    }
+
+    if (msg.type === "settings-update") {
+      // Settings pushed from injector (originally from background worker).
+      if (typeof msg.enabled === "boolean") {
+        ENABLED = msg.enabled;
+        console.debug(`${LOG_PREFIX} Protection ${ENABLED ? "enabled" : "disabled"}`);
+      }
     }
   });
 
@@ -319,9 +366,8 @@
 
   // --- getImageData ---
   CanvasRenderingContext2D.prototype.getImageData = function (x, y, w, h, settings) {
-    if (!ENABLED) return originals.getImageData.call(this, x, y, w, h, settings);
-
     const imageData = originals.getImageData.call(this, x, y, w, h, settings);
+    if (!shouldPerturb()) return imageData;
 
     // Clone the PRNG so repeated calls with the same origin produce the same
     // perturbation pattern (deterministic per-domain, not per-call)
@@ -329,16 +375,12 @@
     perturbPixelData(imageData.data, prng);
 
     telemetry.record("canvas.getImageData", { width: w, height: h });
-    console.debug(
-      `${LOG_PREFIX} Canvas getImageData intercepted (${w}×${h}) on ${PAGE_ORIGIN}`
-    );
-
     return imageData;
   };
 
   // --- toDataURL ---
   HTMLCanvasElement.prototype.toDataURL = function (type, quality) {
-    if (!ENABLED) return originals.toDataURL.call(this, type, quality);
+    if (!shouldPerturb()) return originals.toDataURL.call(this, type, quality);
 
     // Strategy: create an offscreen clone, perturb it, serialize the clone.
     // This avoids modifying the visible canvas.
@@ -354,16 +396,12 @@
     ctx.putImageData(imageData, 0, 0);
 
     telemetry.record("canvas.toDataURL", { width: this.width, height: this.height });
-    console.debug(
-      `${LOG_PREFIX} Canvas toDataURL intercepted (${this.width}×${this.height}) on ${PAGE_ORIGIN}`
-    );
-
     return originals.toDataURL.call(clone, type, quality);
   };
 
   // --- toBlob ---
   HTMLCanvasElement.prototype.toBlob = function (callback, type, quality) {
-    if (!ENABLED) return originals.toBlob.call(this, callback, type, quality);
+    if (!shouldPerturb()) return originals.toBlob.call(this, callback, type, quality);
 
     const clone = originals.createElement("canvas");
     clone.width = this.width;
@@ -377,10 +415,6 @@
     ctx.putImageData(imageData, 0, 0);
 
     telemetry.record("canvas.toBlob", { width: this.width, height: this.height });
-    console.debug(
-      `${LOG_PREFIX} Canvas toBlob intercepted (${this.width}×${this.height}) on ${PAGE_ORIGIN}`
-    );
-
     return originals.toBlob.call(clone, callback, type, quality);
   };
 
@@ -391,34 +425,27 @@
   // --- getFloatFrequencyData ---
   AnalyserNode.prototype.getFloatFrequencyData = function (array) {
     originals.getFloatFrequencyData.call(this, array);
-
-    if (!ENABLED) return;
+    if (!shouldPerturb()) return;
 
     const prng = pagePRNG.clone();
     perturbAudioData(array, prng);
-
     telemetry.record("audio.getFloatFrequencyData", { length: array.length });
-    console.debug(`${LOG_PREFIX} AudioContext getFloatFrequencyData intercepted on ${PAGE_ORIGIN}`);
   };
 
   // --- getByteFrequencyData ---
   AnalyserNode.prototype.getByteFrequencyData = function (array) {
     originals.getByteFrequencyData.call(this, array);
-
-    if (!ENABLED) return;
+    if (!shouldPerturb()) return;
 
     const prng = pagePRNG.clone();
     perturbByteAudioData(array, prng);
-
     telemetry.record("audio.getByteFrequencyData", { length: array.length });
-    console.debug(`${LOG_PREFIX} AudioContext getByteFrequencyData intercepted on ${PAGE_ORIGIN}`);
   };
 
   // --- getChannelData ---
   AudioBuffer.prototype.getChannelData = function (channel) {
     const data = originals.getChannelData.call(this, channel);
-
-    if (!ENABLED) return data;
+    if (!shouldPerturb()) return data;
 
     // Return a copy with perturbation so we don't corrupt the actual audio buffer
     const perturbed = new Float32Array(data);
@@ -426,8 +453,6 @@
     perturbAudioData(perturbed, prng);
 
     telemetry.record("audio.getChannelData", { channel, length: data.length });
-    console.debug(`${LOG_PREFIX} AudioBuffer getChannelData intercepted on ${PAGE_ORIGIN}`);
-
     return perturbed;
   };
 
@@ -469,7 +494,7 @@
    */
   function createWebGLHook(originalFn) {
     return function (pname) {
-      if (!ENABLED) return originalFn.call(this, pname);
+      if (!shouldPerturb()) return originalFn.call(this, pname);
 
       const prng = pagePRNG.clone();
 
@@ -478,14 +503,12 @@
         case WEBGL_FP_PARAMS.RENDERER: {
           const idx = prng.next() % RENDERER_POOL.length;
           telemetry.record("webgl.getParameter", { param: "RENDERER" });
-          console.debug(`${LOG_PREFIX} WebGL RENDERER query intercepted on ${PAGE_ORIGIN}`);
           return RENDERER_POOL[idx];
         }
         case WEBGL_FP_PARAMS.UNMASKED_VENDOR_WEBGL:
         case WEBGL_FP_PARAMS.VENDOR: {
           const idx = prng.next() % VENDOR_POOL.length;
           telemetry.record("webgl.getParameter", { param: "VENDOR" });
-          console.debug(`${LOG_PREFIX} WebGL VENDOR query intercepted on ${PAGE_ORIGIN}`);
           return VENDOR_POOL[idx];
         }
         default:
@@ -502,11 +525,94 @@
   }
 
   // ========================================================================
-  // 9. INITIALIZATION
+  // 9. CLIENTRECTS HOOKS (new in v1.0.0)
+  //
+  // Element.getBoundingClientRect() and Element.getClientRects() are used
+  // by sophisticated fingerprinters to detect font rendering differences.
+  // ========================================================================
+
+  Element.prototype.getBoundingClientRect = function () {
+    const rect = originals.getBoundingClientRect.call(this);
+    if (!shouldPerturb()) return rect;
+
+    const prng = pagePRNG.clone();
+    // Advance PRNG based on element tag for diversity.
+    for (let i = 0; i < (this.tagName || "").length; i++) prng.next();
+
+    telemetry.record("element.getBoundingClientRect", { tag: this.tagName });
+    return perturbDOMRect(rect, prng);
+  };
+
+  Element.prototype.getClientRects = function () {
+    const rects = originals.getClientRects.call(this);
+    if (!shouldPerturb()) return rects;
+
+    const prng = pagePRNG.clone();
+    for (let i = 0; i < (this.tagName || "").length; i++) prng.next();
+
+    const perturbed = [];
+    for (let i = 0; i < rects.length; i++) {
+      perturbed.push(perturbDOMRect(rects[i], prng));
+    }
+
+    telemetry.record("element.getClientRects", { tag: this.tagName, count: rects.length });
+
+    // Return a DOMRectList-like object.
+    perturbed.item = function (index) { return this[index] || null; };
+    return perturbed;
+  };
+
+  // ========================================================================
+  // 10. NAVIGATOR PROPERTY HOOKS (new in v1.0.0)
+  //
+  // Spoof navigator.hardwareConcurrency and navigator.deviceMemory to
+  // prevent hardware-based fingerprinting.
+  // ========================================================================
+
+  try {
+    const prng = pagePRNG.clone();
+
+    // hardwareConcurrency: report a common value (4 or 8)
+    const commonCores = [4, 8, 8, 12, 16];
+    const spoofedCores = commonCores[prng.next() % commonCores.length];
+
+    Object.defineProperty(Navigator.prototype, "hardwareConcurrency", {
+      get() {
+        if (!shouldPerturb()) {
+          return originals.navigatorProto.hardwareConcurrency?.get?.call(this) ?? 4;
+        }
+        telemetry.record("navigator.hardwareConcurrency", { spoofed: spoofedCores });
+        return spoofedCores;
+      },
+      configurable: true,
+    });
+
+    // deviceMemory: report a common value (4 or 8 GB)
+    if ("deviceMemory" in navigator) {
+      const commonMemory = [4, 8, 8, 16];
+      const spoofedMemory = commonMemory[prng.next() % commonMemory.length];
+
+      Object.defineProperty(Navigator.prototype, "deviceMemory", {
+        get() {
+          if (!shouldPerturb()) {
+            return originals.navigatorProto.deviceMemory?.get?.call(this) ?? 8;
+          }
+          telemetry.record("navigator.deviceMemory", { spoofed: spoofedMemory });
+          return spoofedMemory;
+        },
+        configurable: true,
+      });
+    }
+  } catch (e) {
+    // Some browsers may not support these — fail silently.
+  }
+
+  // ========================================================================
+  // 11. INITIALIZATION
   // ========================================================================
 
   console.log(
-    `%c${LOG_PREFIX} Adaptive Privacy Observatory v0.1.0 active`,
+    `%c${LOG_PREFIX} Adaptive Privacy Observatory v1.0.0 active`,
     "color: #00e5ff; font-weight: bold; font-size: 13px;"
   );
   console.log(
@@ -514,17 +620,18 @@
     "color: #b0bec5;"
   );
   console.log(
-    `%c${LOG_PREFIX} Hooks installed: Canvas (getImageData, toDataURL, toBlob), Audio (getFloatFrequencyData, getByteFrequencyData, getChannelData), WebGL (getParameter)`,
+    `%c${LOG_PREFIX} Hooks installed: Canvas, Audio, WebGL, ClientRects, Navigator`,
     "color: #b0bec5;"
   );
 
-  // Expose a minimal global API for Phase 2 integration and debugging
+  // Expose a minimal global API for debugging and integration
   Object.defineProperty(window, "__PRIVACY_OBSERVATORY__", {
     value: Object.freeze({
-      version: "0.1.0",
-      enabled: ENABLED,
+      version: "1.0.0",
+      get enabled() { return ENABLED; },
       origin: PAGE_ORIGIN,
       salt: getDailySalt(),
+      get noiseMultiplier() { return noiseMultiplier; },
       telemetry: telemetry,
     }),
     writable: false,

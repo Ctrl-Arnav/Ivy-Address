@@ -14,11 +14,14 @@ signal. Signals are then aggregated into a final classification:
 
 from __future__ import annotations
 
+import logging
 import time
-from collections import defaultdict
+from collections import OrderedDict, defaultdict
 from dataclasses import dataclass, field
 
 from policy_cache import PolicyEntry
+
+logger = logging.getLogger("apo.classifier")
 
 
 # ---------------------------------------------------------------------------
@@ -42,9 +45,10 @@ SMALL_CANVAS_THRESHOLD: int = 16
 # Canvas sizes above this are likely legitimate drawing operations.
 LARGE_CANVAS_THRESHOLD: int = 256
 
-# Burst detection: more than this many calls within the window → fingerprint.
-BURST_CALL_COUNT: int = 3
-BURST_WINDOW_MS: float = 100.0
+# Burst detection defaults (can be overridden via config).
+DEFAULT_BURST_CALL_COUNT: int = 3
+DEFAULT_BURST_WINDOW_MS: float = 100.0
+DEFAULT_HISTORY_MAX_ORIGINS: int = 5_000
 
 # APIs that are commonly abused for fingerprinting.
 FINGERPRINT_APIS: frozenset[str] = frozenset({
@@ -92,12 +96,24 @@ class HeuristicClassifier:
     Evaluate telemetry events against a set of hand-written rules and produce
     an instant classification. Maintains a short history of recent calls per
     origin so it can detect rapid-fire burst patterns.
+
+    The call history is bounded by ``max_origins`` to prevent unbounded memory
+    growth under sustained load.
     """
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        burst_call_count: int = DEFAULT_BURST_CALL_COUNT,
+        burst_window_ms: float = DEFAULT_BURST_WINDOW_MS,
+        max_origins: int = DEFAULT_HISTORY_MAX_ORIGINS,
+    ) -> None:
         # Recent call timestamps per origin, used for burst detection.
         # Maps origin → list of timestamps (seconds).
-        self._call_history: dict[str, list[float]] = defaultdict(list)
+        # Using OrderedDict to maintain insertion order for LRU eviction.
+        self._call_history: OrderedDict[str, list[float]] = OrderedDict()
+        self._burst_call_count = burst_call_count
+        self._burst_window_ms = burst_window_ms
+        self._max_origins = max_origins
 
     # ----- public interface ------------------------------------------------
 
@@ -165,7 +181,7 @@ class HeuristicClassifier:
 
         reason = self._build_reason(intent, signal_names)
 
-        return PolicyEntry(
+        entry = PolicyEntry(
             origin=origin,
             intent=intent,
             confidence=round(confidence, 4),
@@ -175,6 +191,14 @@ class HeuristicClassifier:
             noise_multiplier=round(noise_multiplier, 4),
             timestamp=time.time(),
         )
+
+        logger.debug(
+            "Classified %s | api=%s intent=%s confidence=%.4f noise=%.4f signals=%s",
+            origin, api, intent, entry.confidence, entry.noise_multiplier,
+            signal_names,
+        )
+
+        return entry
 
     # ----- individual rule checkers ----------------------------------------
 
@@ -205,6 +229,16 @@ class HeuristicClassifier:
 
     def _check_burst(self, origin: str, ts: float) -> list[_Signal]:
         """Detect rapid-fire API calls from the same origin."""
+        # Ensure the origin is in the history; evict LRU if at capacity.
+        if origin not in self._call_history:
+            if len(self._call_history) >= self._max_origins:
+                # Evict the oldest origin.
+                self._call_history.popitem(last=False)
+            self._call_history[origin] = []
+        else:
+            # Promote to most-recently-used.
+            self._call_history.move_to_end(origin)
+
         history = self._call_history[origin]
         history.append(ts)
 
@@ -214,10 +248,10 @@ class HeuristicClassifier:
         history = self._call_history[origin]
 
         # Count calls within the burst window.
-        window_start = ts - (BURST_WINDOW_MS / 1000.0)
+        window_start = ts - (self._burst_window_ms / 1000.0)
         recent = [t for t in history if t >= window_start]
 
-        if len(recent) > BURST_CALL_COUNT:
+        if len(recent) > self._burst_call_count:
             return [_Signal("rapid_burst_calls", 0.80)]
         return []
 

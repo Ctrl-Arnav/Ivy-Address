@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <defs>
+    <linearGradient id="shieldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#00E5FF;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#00BFA5;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0A1929" />
+      <stop offset="100%" style="stop-color:#1A2332" />
+    </linearGradient>
+  </defs>
+  <!-- Background -->
+  <rect width="128" height="128" rx="24" fill="url(#bgGrad)"/>
+  <!-- Shield -->
+  <path d="M64 16 L104 36 L104 68 C104 92 84 112 64 116 C44 112 24 92 24 68 L24 36 Z"
+        fill="none" stroke="url(#shieldGrad)" stroke-width="4" opacity="0.9"/>
+  <path d="M64 22 L98 40 L98 68 C98 88 80 106 64 110 C48 106 30 88 30 68 L30 40 Z"
+        fill="url(#shieldGrad)" opacity="0.15"/>
+  <!-- Eye -->
+  <ellipse cx="64" cy="64" rx="22" ry="14" fill="none" stroke="url(#shieldGrad)" stroke-width="3"/>
+  <circle cx="64" cy="64" r="7" fill="url(#shieldGrad)" opacity="0.8"/>
+  <circle cx="64" cy="64" r="3" fill="#0A1929"/>
+  <!-- Slash through eye -->
+  <line x1="44" y1="80" x2="84" y2="48" stroke="#FF1744" stroke-width="4" stroke-linecap="round"/>
+</svg>
