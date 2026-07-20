@@ -1,25 +1,27 @@
 // ============================================================================
-// Adaptive Privacy Observatory — Injector Script (ISOLATED World)
+// Adaptive Privacy Observatory — Injector Script (ISOLATED World) v1.0.0
 //
 // Runs in the extension's isolated world alongside content.js (MAIN world).
 // Responsibilities:
-//   1. WebSocket connection to the local backend (localhost:8000)
+//   1. WebSocket connection to the local backend (configurable URL)
 //   2. Relay telemetry from the MAIN world content script to the backend
 //   3. Receive classification decisions from the backend and relay back
 //   4. Capture third-party script source text for AI analysis (Phase 3)
+//   5. Forward settings changes from background worker to MAIN world
 //
 // Communication:
 //   MAIN world (content.js) <--window.postMessage--> ISOLATED world (injector.js)
 //   ISOLATED world (injector.js) <--WebSocket--> Backend (main.py)
+//   Background worker <--chrome.runtime.onMessage--> ISOLATED world (injector.js)
 // ============================================================================
 
 (function () {
   "use strict";
 
   const LOG_PREFIX = "[Observatory:Injector]";
-  const WS_URL = "ws://127.0.0.1:8000/ws/telemetry";
-  const RECONNECT_DELAY_MS = 3000;
-  const MAX_RECONNECT_ATTEMPTS = 10;
+  const DEFAULT_WS_URL = "ws://127.0.0.1:8000/ws/telemetry";
+  const RECONNECT_BASE_DELAY_MS = 2000;
+  const MAX_RECONNECT_ATTEMPTS = 15;
   const MESSAGE_CHANNEL = "observatory-telemetry";
 
   // ========================================================================
@@ -34,6 +36,17 @@
       this.reconnectAttempts = 0;
       this.messageQueue = []; // Buffer messages while disconnected
       this.listeners = new Map(); // Event listeners
+    }
+
+    /** Update the WebSocket URL (e.g., from settings change). */
+    updateUrl(newUrl) {
+      if (newUrl && newUrl !== this.url) {
+        this.url = newUrl;
+        if (this.connected) {
+          this.disconnect();
+          this.connect();
+        }
+      }
     }
 
     /** Establish WebSocket connection with auto-reconnect */
@@ -72,7 +85,7 @@
           this._scheduleReconnect();
         };
 
-        this.ws.onerror = (error) => {
+        this.ws.onerror = () => {
           // onerror is always followed by onclose, so reconnect is handled there
           console.warn(`${LOG_PREFIX} WebSocket error — is the backend running?`);
         };
@@ -114,7 +127,10 @@
       }
     }
 
-    /** Schedule a reconnection attempt with exponential backoff */
+    /**
+     * Schedule a reconnection attempt with exponential backoff + jitter.
+     * Jitter prevents thundering herd when many tabs reconnect simultaneously.
+     */
     _scheduleReconnect() {
       if (this.reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
         console.warn(
@@ -125,10 +141,13 @@
       }
 
       this.reconnectAttempts++;
-      const delay = RECONNECT_DELAY_MS * Math.min(this.reconnectAttempts, 5);
+      const exponentialDelay = RECONNECT_BASE_DELAY_MS * Math.min(Math.pow(1.5, this.reconnectAttempts - 1), 10);
+      // Add ±25% jitter.
+      const jitter = exponentialDelay * (0.75 + Math.random() * 0.5);
+      const delay = Math.round(jitter);
 
       console.log(
-        `${LOG_PREFIX} Reconnecting in ${delay / 1000}s ` +
+        `${LOG_PREFIX} Reconnecting in ${(delay / 1000).toFixed(1)}s ` +
         `(attempt ${this.reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})...`
       );
 
@@ -146,10 +165,29 @@
   }
 
   // ========================================================================
-  // 2. Message Bridge — MAIN world ↔ ISOLATED world
+  // 2. Settings Loader
   // ========================================================================
 
-  const backend = new BackendConnection(WS_URL);
+  let currentSettings = null;
+
+  async function loadSettings() {
+    return new Promise((resolve) => {
+      try {
+        chrome.runtime.sendMessage({ type: "get-settings" }, (response) => {
+          currentSettings = response || {};
+          resolve(currentSettings);
+        });
+      } catch (e) {
+        resolve({});
+      }
+    });
+  }
+
+  // ========================================================================
+  // 3. Message Bridge — MAIN world ↔ ISOLATED world
+  // ========================================================================
+
+  let backend = null;
 
   /**
    * Listen for telemetry events from the MAIN world content script.
@@ -166,42 +204,78 @@
     switch (msg.type) {
       case "telemetry":
         // Forward API interception telemetry to the backend
-        backend.send({
-          type: "telemetry",
-          payload: msg.payload,
-        });
+        if (backend) {
+          backend.send({
+            type: "telemetry",
+            payload: msg.payload,
+          });
+        }
+
+        // Also notify background worker for badge updates.
+        try {
+          chrome.runtime.sendMessage({
+            type: "telemetry-event",
+            origin: msg.payload?.origin,
+            intent: msg.payload?.intent,
+          });
+        } catch (e) {
+          // Extension context may be invalidated.
+        }
         break;
 
       case "script_source":
         // Forward captured script source for AI analysis (Phase 3)
-        backend.send({
-          type: "script_source",
-          payload: msg.payload,
-        });
+        if (backend) {
+          backend.send({
+            type: "script_source",
+            payload: msg.payload,
+          });
+        }
         break;
 
       default:
-        console.debug(`${LOG_PREFIX} Unknown message type: ${msg.type}`);
+        break;
     }
   });
 
-  /**
-   * Relay classification responses from the backend back to the MAIN world.
-   * The content script listens for these to update its local policy decisions.
-   */
-  backend.on("response", (data) => {
-    window.postMessage(
-      {
-        channel: MESSAGE_CHANNEL,
-        type: "classification",
-        payload: data,
-      },
-      "*"
-    );
-  });
+  // ========================================================================
+  // 4. Background Worker Message Handler
+  // ========================================================================
+
+  try {
+    chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+      if (message.type === "settings-changed") {
+        currentSettings = message.settings;
+
+        // Forward to MAIN world content script.
+        window.postMessage(
+          {
+            channel: MESSAGE_CHANNEL,
+            type: "settings-update",
+            enabled: message.settings.enabled,
+          },
+          "*"
+        );
+
+        // Update backend URL if changed.
+        if (backend && message.settings.backendUrl) {
+          backend.updateUrl(message.settings.backendUrl);
+        }
+      }
+
+      if (message.type === "rotate-salt") {
+        // Salt rotation — the MAIN world PRNG cache will pick up the new
+        // date on next seed creation. No explicit action needed since
+        // getDailySalt() reads the current date dynamically.
+        console.log(`${LOG_PREFIX} Daily salt rotation signal received`);
+      }
+    });
+  } catch (e) {
+    // chrome.runtime may not be available in all contexts.
+  }
 
   // ========================================================================
-  // 3. Script Source Capture (Phase 3 Preparation)
+  // 5. Script Source Capture (Phase 3 Preparation)
   //
   // Uses a MutationObserver to detect new <script> elements being added
   // to the DOM. For third-party scripts, fetches and sends the source
@@ -243,17 +317,19 @@
       // Only send scripts of meaningful size (skip tiny inline helpers)
       if (sourceText.length < 100 || sourceText.length > 500000) return;
 
-      backend.send({
-        type: "script_source",
-        payload: {
-          url: src,
-          origin: new URL(src).origin,
-          page_origin: location.origin,
-          source_length: sourceText.length,
-          source_text: sourceText.substring(0, 50000), // Cap at 50KB
-          timestamp: Date.now(),
-        },
-      });
+      if (backend) {
+        backend.send({
+          type: "script_source",
+          payload: {
+            url: src,
+            origin: new URL(src).origin,
+            page_origin: location.origin,
+            source_length: sourceText.length,
+            source_text: sourceText.substring(0, 50000), // Cap at 50KB
+            timestamp: Date.now(),
+          },
+        });
+      }
 
       console.debug(`${LOG_PREFIX} Captured third-party script: ${src} (${sourceText.length} bytes)`);
     } catch (e) {
@@ -298,13 +374,34 @@
   document.querySelectorAll("script[src]").forEach(captureScript);
 
   // ========================================================================
-  // 4. Initialize
+  // 6. Initialize
   // ========================================================================
 
-  backend.connect();
+  async function init() {
+    const settings = await loadSettings();
+    const wsUrl = settings.backendUrl || DEFAULT_WS_URL;
 
-  console.log(
-    `%c${LOG_PREFIX} Telemetry bridge initialized — connecting to ${WS_URL}`,
-    "color: #76ff03; font-weight: bold;"
-  );
+    backend = new BackendConnection(wsUrl);
+
+    // Relay classification responses from the backend back to the MAIN world.
+    backend.on("response", (data) => {
+      window.postMessage(
+        {
+          channel: MESSAGE_CHANNEL,
+          type: "classification",
+          payload: data,
+        },
+        "*"
+      );
+    });
+
+    backend.connect();
+
+    console.log(
+      `%c${LOG_PREFIX} Telemetry bridge v1.0.0 initialized — connecting to ${wsUrl}`,
+      "color: #76ff03; font-weight: bold;"
+    );
+  }
+
+  init();
 })();

@@ -1,0 +1,27 @@
+# Adaptive Privacy Observatory — Docker Compose
+# Starts the backend server with the real-time dashboard.
+#
+# Usage:
+#   docker compose up            # foreground
+#   docker compose up -d         # detached
+#   docker compose down          # stop
+
+services:
+  backend:
+    build: .
+    container_name: apo-backend
+    ports:
+      - "${APO_PORT:-8000}:8000"
+    environment:
+      - APO_HOST=0.0.0.0
+      - APO_PORT=8000
+      - APO_LOG_LEVEL=${APO_LOG_LEVEL:-info}
+      - APO_CACHE_TTL_SECONDS=${APO_CACHE_TTL_SECONDS:-3600}
+      - APO_CACHE_MAX_SIZE=${APO_CACHE_MAX_SIZE:-10000}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s

@@ -1,0 +1,355 @@
+/* ============================================================================
+   Adaptive Privacy Observatory — Popup Stylesheet
+   Premium dark glassmorphism design with cyan/teal accent palette.
+   ============================================================================ */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+/* -- Reset & Variables --------------------------------------------------- */
+
+:root {
+  --bg-primary: #0A1929;
+  --bg-secondary: #0D2137;
+  --bg-card: rgba(13, 33, 55, 0.7);
+  --bg-card-hover: rgba(13, 33, 55, 0.9);
+  --border-subtle: rgba(0, 229, 255, 0.12);
+  --border-glow: rgba(0, 229, 255, 0.3);
+
+  --text-primary: #E3F2FD;
+  --text-secondary: #90A4AE;
+  --text-muted: #607D8B;
+
+  --accent-cyan: #00E5FF;
+  --accent-teal: #00BFA5;
+  --accent-red: #FF5252;
+  --accent-amber: #FFD740;
+  --accent-green: #69F0AE;
+
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+
+  --shadow-glow: 0 0 20px rgba(0, 229, 255, 0.1);
+  --shadow-card: 0 4px 16px rgba(0, 0, 0, 0.3);
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  width: 340px;
+  min-height: 420px;
+  overflow: hidden;
+}
+
+/* -- Popup Container ----------------------------------------------------- */
+
+.popup-container {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* -- Header -------------------------------------------------------------- */
+
+.popup-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 4px;
+}
+
+.logo-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.logo-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-sm);
+}
+
+.logo-text h1 {
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: -0.3px;
+  background: linear-gradient(135deg, var(--accent-cyan), var(--accent-teal));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.version {
+  font-size: 10px;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+/* -- Toggle Button ------------------------------------------------------- */
+
+.toggle-btn {
+  width: 44px;
+  height: 24px;
+  border: none;
+  border-radius: 12px;
+  cursor: pointer;
+  position: relative;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  background: rgba(255, 82, 82, 0.3);
+  border: 1px solid rgba(255, 82, 82, 0.4);
+}
+
+.toggle-btn.active {
+  background: rgba(0, 191, 165, 0.3);
+  border-color: rgba(0, 191, 165, 0.5);
+}
+
+.toggle-icon {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--accent-red);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 0 8px rgba(255, 82, 82, 0.5);
+}
+
+.toggle-btn.active .toggle-icon {
+  left: 23px;
+  background: var(--accent-teal);
+  box-shadow: 0 0 8px rgba(0, 191, 165, 0.5);
+}
+
+/* -- Status Banner ------------------------------------------------------- */
+
+.status-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: var(--radius-md);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  background: rgba(255, 82, 82, 0.1);
+  border: 1px solid rgba(255, 82, 82, 0.2);
+  color: var(--accent-red);
+  transition: all 0.3s ease;
+}
+
+.status-banner.active {
+  background: rgba(0, 229, 255, 0.08);
+  border-color: rgba(0, 229, 255, 0.2);
+  color: var(--accent-cyan);
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent-red);
+  animation: none;
+}
+
+.status-banner.active .status-dot {
+  background: var(--accent-cyan);
+  animation: pulse 2s ease-in-out infinite;
+  box-shadow: 0 0 6px var(--accent-cyan);
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.6; transform: scale(0.85); }
+}
+
+/* -- Domain Card --------------------------------------------------------- */
+
+.domain-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 12px 14px;
+  backdrop-filter: blur(10px);
+  transition: border-color 0.3s ease;
+}
+
+.domain-card:hover {
+  border-color: var(--border-glow);
+}
+
+.domain-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+
+.domain-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+  word-break: break-all;
+  margin-bottom: 8px;
+}
+
+.domain-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.classification-badge {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 20px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.classification-badge.fingerprint {
+  background: rgba(255, 82, 82, 0.15);
+  color: var(--accent-red);
+  border: 1px solid rgba(255, 82, 82, 0.3);
+}
+
+.classification-badge.legitimate {
+  background: rgba(105, 240, 174, 0.15);
+  color: var(--accent-green);
+  border: 1px solid rgba(105, 240, 174, 0.3);
+}
+
+.classification-badge.unknown {
+  background: rgba(255, 215, 64, 0.12);
+  color: var(--accent-amber);
+  border: 1px solid rgba(255, 215, 64, 0.25);
+}
+
+.confidence-val {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+/* -- Stats Grid ---------------------------------------------------------- */
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+
+.stat-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 10px 8px;
+  text-align: center;
+  backdrop-filter: blur(10px);
+  transition: all 0.3s ease;
+}
+
+.stat-card:hover {
+  border-color: var(--border-glow);
+  box-shadow: var(--shadow-glow);
+  transform: translateY(-1px);
+}
+
+.stat-value {
+  font-size: 18px;
+  font-weight: 700;
+  background: linear-gradient(135deg, var(--accent-cyan), var(--accent-teal));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  line-height: 1.2;
+}
+
+.stat-label {
+  font-size: 9px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-top: 2px;
+}
+
+/* -- Action Buttons ------------------------------------------------------ */
+
+.actions {
+  display: flex;
+  gap: 8px;
+}
+
+.action-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+  text-decoration: none;
+  cursor: pointer;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  transition: all 0.3s ease;
+}
+
+.action-btn:hover {
+  border-color: var(--accent-cyan);
+  background: rgba(0, 229, 255, 0.08);
+  box-shadow: 0 0 12px rgba(0, 229, 255, 0.15);
+  transform: translateY(-1px);
+}
+
+.action-icon {
+  font-size: 14px;
+}
+
+/* -- Footer -------------------------------------------------------------- */
+
+.popup-footer {
+  padding-top: 4px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.backend-indicator {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+.backend-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent-red);
+  transition: background 0.3s ease;
+}
+
+.backend-indicator.connected .backend-dot {
+  background: var(--accent-green);
+  box-shadow: 0 0 6px rgba(105, 240, 174, 0.5);
+}
+
+.backend-indicator.connected {
+  color: var(--accent-green);
+}

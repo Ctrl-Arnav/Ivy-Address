@@ -1,6 +1,22 @@
-# Adaptive Privacy Observatory — Backend Dependencies (Phase 2)
-# ML dependencies (transformers, torch, etc.) will be added in Phase 3.
+# Adaptive Privacy Observatory — Backend Dependencies
+# Production-ready with pinned versions.
 
+# -- Core server --
 fastapi>=0.115,<1.0
 uvicorn[standard]>=0.30,<1.0
 websockets>=12.0,<14.0
+
+# -- Configuration --
+pydantic-settings>=2.5,<3.0
+
+# -- Machine Learning & AST Analysis --
+scikit-learn>=1.4,<2.0
+numpy>=1.26,<3.0
+
+# -- Testing --
+pytest>=8.0,<9.0
+pytest-asyncio>=0.24,<1.0
+httpx>=0.27,<1.0
+
+# -- Code quality --
+ruff>=0.6,<1.0
